@@ -1,0 +1,52 @@
+# Deploys index.html (and any sibling assets) to GitHub Pages on every push to main.
+#
+# To use this workflow:
+#   1. Push this repo to GitHub.
+#   2. Go to Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+#   3. Push to main. The workflow below will deploy automatically.
+#
+# If you'd rather use the simpler "Deploy from a branch" mode, you can delete this file
+# and just point Pages at the `main` branch root.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Everything in the repo root is shipped as the site
+          path: "."
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

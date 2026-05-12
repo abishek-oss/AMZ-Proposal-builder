@@ -1,0 +1,56 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# Node — in case anyone adds a build step later
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log*
+
+# Python — in case of helper scripts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Build / dist
+dist/
+build/
+out/
+.cache/
+.parcel-cache/
+
+# Generated proposals — don't commit client output
+*.xlsx
+*.Proposal.xlsx
+"* Proposal.xlsx"
+"* Brief.json"
+
+# Local secrets
+.env
+.env.local
+.env.*.local
+
+# Internal scratchpad / intermediates
+_logo_b64.txt
+_templates.js
+templates.json
+templates_raw.json
+logo_amzprep.png
