@@ -3,230 +3,664 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AMZ Prep Proposal Builder</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<title>AMZ Prep // Proposal Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <style>
   :root {
-    --brand: #5B95F9;
-    --brand-dark: #33334b;
-    --ink: #1a1a1f;
-    --muted: #6b7280;
-    --line: #e5e7eb;
-    --soft: #f8fafc;
-    --soft-2: #f1f5f9;
-    --soft-blue: #E8F0FE;
-    --good: #16a34a;
-    --warn: #d97706;
-    --bad: #dc2626;
-    --radius: 10px;
-    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+    --bg-0: #020409;
+    --bg-1: #050a17;
+    --ink: #eef3ff;
+    --ink-2: #b4c0d8;
+    --ink-3: #6c7a98;
+    --ink-4: #3d4865;
+    --accent: #5b8bff;
+    --accent-2: #8b5bff;
+    --accent-cyan: #5beaff;
+    --accent-glow: rgba(91, 139, 255, 0.5);
+    --accent-soft: rgba(91, 139, 255, 0.08);
+    --line: rgba(120, 160, 230, 0.08);
+    --line-2: rgba(120, 160, 230, 0.18);
+    --line-3: rgba(120, 160, 230, 0.32);
+    --surface: rgba(10, 18, 38, 0.55);
+    --surface-2: rgba(16, 26, 52, 0.7);
+    --hud-green: #5fffa8;
+    --display: "Fraunces", "Times New Roman", serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    --clip-corner: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+    --clip-corner-sm: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    color: var(--ink); background: var(--soft);
-    font-size: 14px; line-height: 1.5;
+    font-family: var(--sans); font-size: 14px; color: var(--ink);
+    background: var(--bg-0);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh; overflow-x: hidden;
   }
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -3; pointer-events: none;
+    background:
+      radial-gradient(ellipse 90% 60% at 15% 0%, rgba(91, 139, 255, 0.13), transparent 65%),
+      radial-gradient(ellipse 80% 50% at 85% 100%, rgba(139, 91, 255, 0.10), transparent 65%),
+      linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 60%, var(--bg-0) 100%);
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: -3; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(120, 160, 230, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 160, 230, 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 80%);
+  }
+  /* scanline overlay — subtle, gamey */
+  .scanlines {
+    position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(91, 139, 255, 0.0) 0px,
+      rgba(91, 139, 255, 0.0) 2px,
+      rgba(91, 139, 255, 0.025) 3px,
+      rgba(91, 139, 255, 0.0) 4px
+    );
+    mix-blend-mode: overlay;
+  }
+  .vignette {
+    position: fixed; inset: 0; z-index: 51; pointer-events: none;
+    background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 50%, rgba(2, 4, 9, 0.4) 100%);
+  }
+  #three-host { position: fixed; inset: 0; z-index: -2; pointer-events: none; }
+  #tracer { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.85; }
+
+  /* ==================== LOGIN GATE ==================== */
+  #gate {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 24px; z-index: 100;
+    background: radial-gradient(circle at 50% 50%, rgba(2, 4, 9, 0.3), rgba(2, 4, 9, 0.92) 70%);
+    backdrop-filter: blur(4px);
+    animation: fade-in 0.6s ease-out;
+  }
+  #gate.hidden { display: none; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .auth-card {
+    position: relative; width: min(500px, 100%);
+    padding: 52px 44px 36px; text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    clip-path: var(--clip-corner);
+    backdrop-filter: blur(20px) saturate(140%);
+    box-shadow: 0 50px 100px -30px rgba(0, 0, 0, 0.7),
+                0 0 0 1px rgba(91, 139, 255, 0.08) inset,
+                0 0 80px -20px rgba(91, 139, 255, 0.2);
+    animation: card-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes card-rise {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  /* gamey corner brackets */
+  .corner-brackets::before, .corner-brackets::after,
+  .corner-brackets > .br-tr, .corner-brackets > .br-bl {
+    content: ""; position: absolute; width: 18px; height: 18px;
+    border-color: var(--accent); pointer-events: none;
+  }
+  .corner-brackets::before { top: 8px; left: 8px; border-top: 1px solid; border-left: 1px solid; }
+  .corner-brackets::after  { bottom: 8px; right: 8px; border-bottom: 1px solid; border-right: 1px solid; }
+  .corner-brackets > .br-tr { top: 8px; right: 8px; border-top: 1px solid; border-right: 1px solid; }
+  .corner-brackets > .br-bl { bottom: 8px; left: 8px; border-bottom: 1px solid; border-left: 1px solid; }
+
+  .auth-id {
+    font-family: var(--mono); font-size: 10px; color: var(--accent);
+    letter-spacing: 0.2em; margin: 0 0 22px;
+  }
+  .auth-id .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--hud-green); margin-right: 8px;
+    box-shadow: 0 0 8px var(--hud-green);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .auth-mark {
+    width: 56px; height: 56px; margin: 0 auto 24px;
+    border: 1px solid var(--line-2); clip-path: var(--clip-corner-sm);
+    background: radial-gradient(circle at 30% 30%, rgba(91, 139, 255, 0.18), rgba(2, 4, 9, 0.4));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 30px rgba(91, 139, 255, 0.25);
+  }
+  .auth-mark svg { width: 28px; height: 28px; }
+  .auth-title {
+    font-family: var(--display);
+    font-weight: 350; font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 42px; line-height: 1.02; margin: 0 0 8px;
+    color: var(--ink); letter-spacing: -0.025em;
+  }
+  .auth-title em {
+    font-style: italic; font-weight: 300;
+    background: linear-gradient(120deg, var(--accent), #b39bff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .auth-subtitle {
+    font-family: var(--mono);
+    font-size: 11px; color: var(--ink-2); margin: 0 0 32px;
+    letter-spacing: 0.06em;
+  }
+  .gsi-host { display: flex; justify-content: center; margin-bottom: 18px; }
+  .auth-note {
+    font-family: var(--mono);
+    font-size: 10px; color: var(--ink-3); margin: 18px 0 0;
+    line-height: 1.7; letter-spacing: 0.04em;
+  }
+  .auth-error {
+    margin: 16px 0 0; padding: 11px 14px;
+    background: rgba(220, 90, 90, 0.12); border: 1px solid rgba(220, 90, 90, 0.3);
+    clip-path: var(--clip-corner-sm);
+    color: #ffb3b3; font-size: 12px; display: none; font-family: var(--mono);
+  }
+  .auth-error.show { display: block; }
+
+  /* ==================== APP CHROME ==================== */
+  #app { display: none; min-height: 100vh; }
+  #app.show { display: block; animation: fade-in 0.5s ease-out; }
+
+  /* TOP TELEMETRY BAR */
+  .telemetry-bar {
+    background: rgba(2, 4, 9, 0.9);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(20px);
+    padding: 6px 32px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3); letter-spacing: 0.08em;
+    display: flex; gap: 24px; align-items: center; justify-content: space-between;
+  }
+  .telemetry-bar .group { display: flex; gap: 18px; }
+  .telemetry-bar .item { display: flex; align-items: center; gap: 6px; }
+  .telemetry-bar .item .k { color: var(--accent); }
+  .telemetry-bar .item .v { color: var(--ink-2); }
+  .telemetry-bar .dot-live {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--hud-green); box-shadow: 0 0 8px var(--hud-green);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+
   header.app {
-    background: var(--brand-dark); color: white;
-    padding: 18px 24px;
+    background: rgba(2, 4, 9, 0.72);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(20px) saturate(140%);
+    padding: 18px 32px;
     display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
   }
-  header.app h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-  header.app .sub { font-size: 12px; opacity: 0.7; }
-  main { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid;
-         grid-template-columns: 1fr 360px; gap: 24px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  header.app .brand { display: flex; align-items: center; gap: 14px; }
+  header.app .brand-mark {
+    width: 36px; height: 36px; clip-path: var(--clip-corner-sm);
+    border: 1px solid var(--line-2);
+    background: radial-gradient(circle at 30% 30%, rgba(91, 139, 255, 0.18), rgba(2, 4, 9, 0.4));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 24px rgba(91, 139, 255, 0.18);
+  }
+  header.app h1 {
+    margin: 0; font-family: var(--display); font-weight: 350;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 22px; letter-spacing: -0.015em;
+  }
+  header.app .meta {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  header.app .user {
+    display: flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+    letter-spacing: 0.04em;
+  }
+  header.app .user img {
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2);
+  }
+  header.app button.signout {
+    background: transparent; border: 1px solid var(--line-2);
+    color: var(--ink-2); padding: 8px 14px; clip-path: var(--clip-corner-sm);
+    font-size: 11px; cursor: pointer; transition: 0.2s;
+    font-family: var(--mono); font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  header.app button.signout:hover {
+    border-color: var(--accent); color: var(--ink);
+    box-shadow: 0 0 20px rgba(91, 139, 255, 0.15);
+  }
+
+  /* STEP PROGRESS INDICATOR */
+  .step-progress {
+    position: sticky; top: 78px; z-index: 9;
+    background: rgba(2, 4, 9, 0.85); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 32px;
+    display: flex; align-items: center; gap: 8px;
+    max-width: 1200px; margin: 0 auto;
+    overflow-x: auto;
+  }
+  .step-progress .seg {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.12em; color: var(--ink-4);
+    text-transform: uppercase; cursor: pointer; transition: 0.2s;
+    white-space: nowrap;
+  }
+  .step-progress .seg .n {
+    width: 22px; height: 22px; clip-path: var(--clip-corner-sm);
+    border: 1px solid var(--line-2); display: flex; align-items: center;
+    justify-content: center; font-size: 9px; color: var(--ink-3);
+    background: rgba(10, 18, 38, 0.6);
+  }
+  .step-progress .seg.active { color: var(--accent); }
+  .step-progress .seg.active .n {
+    border-color: var(--accent); color: var(--accent);
+    box-shadow: 0 0 12px rgba(91, 139, 255, 0.4);
+    background: rgba(91, 139, 255, 0.12);
+  }
+  .step-progress .seg.done .n {
+    border-color: var(--hud-green); color: var(--hud-green);
+    background: rgba(95, 255, 168, 0.08);
+  }
+  .step-progress .arrow { color: var(--ink-4); font-size: 12px; }
+
+  main {
+    max-width: 1200px; margin: 0 auto; padding: 32px 32px 80px;
+    display: grid; grid-template-columns: 1fr 360px; gap: 32px;
+  }
+  @media (max-width: 1020px) { main { grid-template-columns: 1fr; } }
+
   .panel {
-    background: white; border: 1px solid var(--line); border-radius: var(--radius);
-    box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px;
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    clip-path: var(--clip-corner);
+    padding: 28px 30px;
+    margin-bottom: 22px;
+    backdrop-filter: blur(12px) saturate(120%);
+    transition: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
+  .panel:hover {
+    border-color: var(--line-2);
+    transform: translateY(-1px);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.6);
+  }
+  .panel .step-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10px; color: var(--accent);
+    letter-spacing: 0.15em; text-transform: uppercase; font-weight: 500;
+    margin-bottom: 14px;
+    padding: 5px 12px; border: 1px solid var(--line-2);
+    clip-path: var(--clip-corner-sm); background: var(--accent-soft);
+  }
+  .panel .step-tag .bracket { color: var(--ink-4); }
   .panel h2 {
-    margin: 0 0 4px; font-size: 14px; text-transform: uppercase;
-    letter-spacing: 0.04em; color: var(--brand-dark);
+    margin: 0 0 6px; font-family: var(--display); font-weight: 350;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink);
   }
-  .panel .hint { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
-  label { display: block; font-weight: 500; font-size: 13px; margin-bottom: 6px; color: var(--ink); }
+  .panel .hint {
+    color: var(--ink-2); font-size: 13px; margin: 0 0 20px;
+    line-height: 1.6; max-width: 540px;
+  }
+
+  label { display: block; font-family: var(--mono); font-weight: 500; font-size: 10px;
+          margin-bottom: 8px; color: var(--ink-3);
+          letter-spacing: 0.15em; text-transform: uppercase; }
   input[type="text"], input[type="number"], select, textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
-    border-radius: 6px; font-size: 14px; font-family: inherit;
-    background: white; transition: border-color 0.12s, box-shadow 0.12s;
+    width: 100%; padding: 11px 14px;
+    background: rgba(2, 4, 9, 0.55);
+    border: 1px solid var(--line-2);
+    clip-path: var(--clip-corner-sm);
+    font-size: 14px; font-family: inherit; color: var(--ink);
+    transition: 0.2s;
   }
-  input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
-    outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(91,149,249,0.15);
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    background: rgba(91, 139, 255, 0.06);
+    box-shadow: 0 0 30px rgba(91, 139, 255, 0.15);
   }
-  .field { margin-bottom: 14px; }
-  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .pill {
-    display: inline-block; font-size: 11px; padding: 2px 8px;
-    border-radius: 10px; background: var(--soft-2); color: var(--muted);
-    font-weight: 500;
-  }
-  .pill.brand { background: rgba(91,149,249,0.12); color: var(--brand); }
-  .pill.good { background: rgba(22,163,74,0.12); color: var(--good); }
-  .pill.warn { background: rgba(217,119,6,0.12); color: var(--warn); }
-  button.primary {
-    background: var(--brand); color: white; border: none;
-    padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px;
-    cursor: pointer; transition: background 0.15s;
-  }
-  button.primary:hover { background: #4884ec; }
-  button.primary:disabled { background: #94a3b8; cursor: not-allowed; }
-  button.ghost {
-    background: transparent; color: var(--brand-dark); border: 1px solid var(--line);
-    padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
-  }
-  button.ghost:hover { background: var(--soft); }
+  .field { margin-bottom: 16px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .helper { color: var(--ink-3); font-size: 11px; margin-top: 6px; font-family: var(--mono); letter-spacing: 0.04em; }
+  .helper code { font-family: var(--mono); color: var(--accent); font-size: 11px; }
+
   .drop {
-    border: 2px dashed var(--line); border-radius: var(--radius);
-    padding: 28px; text-align: center; cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    border: 1px dashed var(--line-3); clip-path: var(--clip-corner);
+    padding: 42px 24px; text-align: center; cursor: pointer; transition: 0.25s;
+    background: linear-gradient(180deg, rgba(91, 139, 255, 0.03), rgba(91, 139, 255, 0.01));
+    position: relative;
   }
-  .drop.dragging { border-color: var(--brand); background: rgba(91,149,249,0.04); }
-  .drop p { margin: 6px 0; color: var(--muted); }
-  .drop strong { color: var(--ink); }
+  .drop:hover, .drop.dragging {
+    border-color: var(--accent); background: rgba(91, 139, 255, 0.05);
+  }
+  .drop strong { color: var(--ink); display: block; margin-bottom: 8px; font-weight: 500; font-size: 15px; font-family: var(--mono); letter-spacing: 0.04em; }
+  .drop p { margin: 4px 0; color: var(--ink-3); font-size: 12px; font-family: var(--mono); letter-spacing: 0.04em; }
+  .drop-icon {
+    width: 40px; height: 40px; margin: 0 auto 14px;
+    clip-path: var(--clip-corner-sm); background: rgba(91, 139, 255, 0.1);
+    display: flex; align-items: center; justify-content: center;
+  }
+
   .file-info {
-    margin-top: 12px; padding: 10px 12px; background: var(--soft-2);
-    border-radius: 6px; display: flex; align-items: center; justify-content: space-between;
-    font-size: 13px;
+    margin-top: 12px; padding: 12px 14px;
+    background: rgba(91, 139, 255, 0.06);
+    border: 1px solid var(--line-2);
+    clip-path: var(--clip-corner-sm);
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+    color: var(--ink-2);
   }
-  .extracted {
-    margin-top: 12px; padding: 12px; background: rgba(91,149,249,0.05);
-    border-left: 3px solid var(--brand); font-size: 13px; border-radius: 4px;
-  }
-  .extracted .row { display: flex; gap: 8px; margin: 2px 0; }
-  .extracted .row .lbl { color: var(--muted); min-width: 110px; font-weight: 500; }
+
+  /* Services table */
   table.svc { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.svc th { text-align: left; font-weight: 600; color: var(--muted);
-                 padding: 8px 6px; border-bottom: 1px solid var(--line); font-size: 11px;
-                 text-transform: uppercase; letter-spacing: 0.04em; }
-  table.svc td { padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  table.svc tr.section td { background: var(--soft-2); font-weight: 600; color: var(--brand-dark);
-                            padding: 8px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-  table.svc td input[type="number"] { padding: 5px 8px; font-size: 13px; max-width: 110px; }
-  table.svc td.label { font-weight: 500; }
-  table.svc td.rate { color: var(--muted); font-variant-numeric: tabular-nums; }
-  table.svc td.toggle { text-align: center; width: 30px; }
+  table.svc th {
+    text-align: left; font-family: var(--mono); font-weight: 500; color: var(--ink-3);
+    padding: 12px 10px; border-bottom: 1px solid var(--line);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em;
+  }
+  table.svc td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  table.svc tr.section td {
+    background: linear-gradient(90deg, rgba(91, 139, 255, 0.08), transparent);
+    font-family: var(--mono); font-weight: 600;
+    color: var(--accent); font-size: 11px;
+    padding: 14px 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  table.svc tr.section td::before { content: "[ "; color: var(--ink-4); }
+  table.svc tr.section td::after { content: " ]"; color: var(--ink-4); }
+  table.svc td.label { color: var(--ink); font-weight: 400; }
+  table.svc td.rate { color: var(--ink-3); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+  table.svc td.toggle { text-align: center; width: 28px; }
+  table.svc td input[type="number"] { padding: 7px 11px; font-size: 13px; max-width: 110px; font-family: var(--mono); }
+  table.svc td input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+  table.svc tr:hover td:not(.section) { background: rgba(91, 139, 255, 0.025); }
+
+  button.primary {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--accent), #7b6bff);
+    color: white; border: none; padding: 13px 26px;
+    clip-path: var(--clip-corner-sm);
+    font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.25s;
+    font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
+    box-shadow: 0 8px 24px -8px rgba(91, 139, 255, 0.5);
+  }
+  button.primary::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
+    transform: translateX(-100%); transition: transform 0.6s;
+  }
+  button.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 36px -12px rgba(91, 139, 255, 0.65),
+                0 0 40px rgba(91, 139, 255, 0.35);
+  }
+  button.primary:hover::after { transform: translateX(100%); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.ghost {
+    background: transparent; color: var(--ink-2);
+    border: 1px solid var(--line-2); padding: 11px 18px;
+    clip-path: var(--clip-corner-sm);
+    font-size: 11px; cursor: pointer; font-family: var(--mono);
+    font-weight: 500; transition: 0.2s; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  button.ghost:hover {
+    border-color: var(--accent); color: var(--ink);
+    box-shadow: 0 0 24px rgba(91, 139, 255, 0.15);
+  }
+
+  /* Summary HUD */
+  .summary .row {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 11px;
+    padding: 9px 0; border-bottom: 1px dashed var(--line);
+    letter-spacing: 0.04em;
+  }
+  .summary .row:last-child { border-bottom: none; }
+  .summary .row .v { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .summary .row .k { color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; }
+
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    padding: 4px 10px; clip-path: var(--clip-corner-sm);
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--line-2);
+  }
+  details { margin-top: 14px; }
+  details summary { cursor: pointer; font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
   .section-title {
-    margin: 14px 0 6px; font-size: 13px; font-weight: 600; color: var(--brand-dark);
-    text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 4px;
+    margin: 14px 0 6px; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.15em; padding-bottom: 8px;
     border-bottom: 1px solid var(--line);
   }
-  .helper { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .sticky { position: sticky; top: 16px; }
-  .summary .row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
-  .summary .row .v { font-weight: 500; }
-  details { margin-top: 12px; }
-  details summary { cursor: pointer; font-size: 13px; color: var(--brand); font-weight: 500; }
-  .errors { color: var(--bad); font-size: 13px; margin-top: 8px; }
+  .section-title::before { content: "[ "; color: var(--ink-4); }
+  .section-title::after { content: " ]"; color: var(--ink-4); }
+
+  .footer-note {
+    color: var(--ink-3); font-family: var(--mono); font-size: 10px;
+    text-align: center; margin: 60px 0 24px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .sticky { position: sticky; top: 156px; }
+
+  .extracted {
+    margin-top: 16px; padding: 16px 18px;
+    background: linear-gradient(135deg, rgba(91, 139, 255, 0.08), rgba(139, 91, 255, 0.04));
+    border: 1px solid rgba(91, 139, 255, 0.22);
+    clip-path: var(--clip-corner-sm);
+    font-family: var(--mono); font-size: 11px;
+  }
+  .extracted .head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px; font-weight: 600;
+    color: var(--accent); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.15em;
+  }
+  .extracted .head::before { content: "▸ "; }
+  .extracted .row { display: flex; gap: 8px; padding: 3px 0; }
+  .extracted .lbl { color: var(--ink-3); min-width: 110px; }
+  .extracted .val { color: var(--ink); }
+
+  /* Panel entrance animations */
+  .panel { animation: panel-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .panel:nth-child(1) { animation-delay: 0.05s; }
+  .panel:nth-child(2) { animation-delay: 0.12s; }
+  .panel:nth-child(3) { animation-delay: 0.18s; }
+  .panel:nth-child(4) { animation-delay: 0.24s; }
+  .panel:nth-child(5) { animation-delay: 0.3s; }
+  @keyframes panel-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Bottom system bar */
+  .system-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 9;
+    background: rgba(2, 4, 9, 0.92); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--line);
+    padding: 6px 32px; font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3); letter-spacing: 0.08em;
+    display: flex; gap: 18px; justify-content: space-between; align-items: center;
+  }
+  .system-bar .item { display: flex; align-items: center; gap: 6px; }
+  .system-bar .k { color: var(--accent); }
+  .system-bar .v { color: var(--ink-2); }
+  main { padding-bottom: 100px; }
+
+  /* errors */
+  .errors { color: #ffb3b3; font-family: var(--mono); font-size: 11px; margin-top: 12px; letter-spacing: 0.04em; }
   .errors ul { margin: 4px 0; padding-left: 18px; }
-  .footer-note { color: var(--muted); font-size: 12px; text-align: center; margin: 30px 0; }
-  .toggle-switch { position: relative; display: inline-block; width: 34px; height: 18px; }
-  .toggle-switch input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-    background: #cbd5e1; border-radius: 18px; transition: 0.15s;
-  }
-  .slider:before {
-    position: absolute; content: ""; height: 14px; width: 14px;
-    left: 2px; top: 2px; background: white; border-radius: 50%; transition: 0.15s;
-  }
-  input:checked + .slider { background: var(--brand); }
-  input:checked + .slider:before { transform: translateX(16px); }
-  .badge-warehouse {
-    display: inline-block; padding: 3px 10px; border-radius: 12px;
-    background: rgba(91,149,249,0.12); color: var(--brand); font-size: 12px;
-    margin-right: 6px; margin-top: 4px;
-  }
 </style>
 </head>
 <body>
-<header class="app">
-  <div>
-    <h1>AMZ Prep Proposal Builder</h1>
-    <div class="sub">Generates rate cards in the new warehouse-specific template format</div>
-  </div>
-  <div class="sub" id="version-tag">v1.0 · May 2026</div>
-</header>
 
-<main>
-  <div class="left-col">
+<div id="three-host"></div>
+<canvas id="tracer"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
 
-    <section class="panel">
-      <h2>1. Upload Presale Doc</h2>
-      <p class="hint">Drop the presale (.txt, .pdf, .docx) and the form pre-fills.
-        Manual overrides always win.</p>
-      <div class="drop" id="drop">
-        <p><strong>Drop your presale here</strong> or click to browse</p>
-        <p style="font-size: 12px;">.txt, .pdf, .docx · max 10 MB</p>
-        <input type="file" id="file-input" hidden accept=".txt,.pdf,.docx" />
-      </div>
-      <div id="file-info-block"></div>
-      <div id="extracted-block"></div>
-    </section>
-
-    <section class="panel">
-      <h2>2. Client & Warehouse</h2>
-      <p class="hint">The warehouse choice determines which rate-card template is generated.</p>
-      <div class="field-row">
-        <div class="field">
-          <label for="client-name">Client name</label>
-          <input type="text" id="client-name" placeholder="e.g. Acme Brands" />
-          <div class="helper">Used in filename. Output: <code id="filename-preview">[Client] Proposal.xlsx</code></div>
-        </div>
-        <div class="field">
-          <label for="warehouse">Warehouse</label>
-          <select id="warehouse"></select>
-          <div class="helper" id="template-tag"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>3. Services & Quantities</h2>
-      <p class="hint">Toggle services the client uses. Quantities pre-fill the input cells in the
-        generated calculator. Rate column shows the FR rate that applies.</p>
-      <div id="services-table-host"></div>
-    </section>
-
-    <section class="panel">
-      <h2>4. Rate Overrides (Optional)</h2>
-      <p class="hint">Leave blank to use the standard template rates. Set custom rates
-        only if Goku has approved a deviation for this client.</p>
-      <details>
-        <summary>Show rate overrides</summary>
-        <div id="overrides-host" style="margin-top: 12px;"></div>
-      </details>
-    </section>
-
-    <section class="panel" id="generate-panel">
-      <h2>5. Generate</h2>
-      <p class="hint">Review the summary on the right, then click generate.
-        The .xlsx will download immediately.</p>
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <button class="primary" id="generate-btn">Generate proposal .xlsx</button>
-        <button class="ghost" id="export-json-btn">Export brief (JSON)</button>
-        <button class="ghost" id="reset-btn">Reset form</button>
-      </div>
-      <div id="errors" class="errors"></div>
-    </section>
-
-  </div>
-
-  <aside class="right-col">
-    <div class="panel sticky">
-      <h2>Summary</h2>
-      <p class="hint">Live preview of what the generator will output.</p>
-      <div class="summary" id="summary"></div>
+<!-- ==================== LOGIN GATE ==================== -->
+<div id="gate">
+  <div class="auth-card corner-brackets">
+    <span class="br-tr"></span><span class="br-bl"></span>
+    <div class="auth-id"><span class="dot"></span>SECURE TERMINAL · AUTH REQUIRED</div>
+    <div class="auth-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#mark-grad)" stroke-width="1.5">
+        <defs>
+          <linearGradient id="mark-grad" x1="0" y1="0" x2="24" y2="24">
+            <stop offset="0%" stop-color="#5b8bff"/>
+            <stop offset="100%" stop-color="#b39bff"/>
+          </linearGradient>
+        </defs>
+        <path d="M3 12 L9 12 L11 7 L13 17 L15 12 L21 12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
     </div>
-  </aside>
-</main>
+    <h1 class="auth-title">AMZ Prep<br/><em>Proposal Builder</em></h1>
+    <p class="auth-subtitle">// WAREHOUSE RATE-CARD ENGINE</p>
+    <div class="gsi-host" id="gsi-host"></div>
+    <div class="auth-error" id="auth-error"></div>
+    <p class="auth-note">RESTRICTED ACCESS · @AMZPREP.COM ACCOUNTS ONLY</p>
+  </div>
+</div>
 
-<div class="footer-note">
-  AMZ Prep Proposal Builder · built from Apr 23 2026 framework · templates: Dothan, K&amp;A/Shipmate, Selery, UNIS, ES+
+<!-- ==================== APP ==================== -->
+<div id="app">
+
+  <div class="telemetry-bar">
+    <div class="group">
+      <div class="item"><span class="dot-live"></span><span class="k">SYS</span><span class="v">ONLINE</span></div>
+      <div class="item"><span class="k">BUILD</span><span class="v">v1.0.0</span></div>
+      <div class="item"><span class="k">FRAMEWORK</span><span class="v">APR.23.2026</span></div>
+    </div>
+    <div class="group">
+      <div class="item"><span class="k">TEMPLATES</span><span class="v" id="tb-templates">5 LOADED</span></div>
+      <div class="item"><span class="k">SESSION</span><span class="v" id="tb-session">—</span></div>
+    </div>
+  </div>
+
+  <header class="app">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#5b8bff" stroke-width="1.5">
+          <path d="M3 12 L9 12 L11 7 L13 17 L15 12 L21 12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>AMZ Prep</h1>
+        <div class="meta">// PROPOSAL BUILDER</div>
+      </div>
+    </div>
+    <div class="user" id="user-info"></div>
+  </header>
+
+  <div class="step-progress" id="step-progress">
+    <div class="seg" data-step="1"><span class="n">01</span><span>UPLOAD</span></div>
+    <span class="arrow">›</span>
+    <div class="seg" data-step="2"><span class="n">02</span><span>CLIENT</span></div>
+    <span class="arrow">›</span>
+    <div class="seg" data-step="3"><span class="n">03</span><span>SERVICES</span></div>
+    <span class="arrow">›</span>
+    <div class="seg" data-step="4"><span class="n">04</span><span>OVERRIDES</span></div>
+    <span class="arrow">›</span>
+    <div class="seg" data-step="5"><span class="n">05</span><span>GENERATE</span></div>
+  </div>
+
+  <main>
+    <div class="left-col">
+
+      <section class="panel" id="panel-1">
+        <div class="step-tag"><span class="bracket">[</span> STEP 01 <span class="bracket">]</span> :: INPUT</div>
+        <h2>Upload presale</h2>
+        <p class="hint">Drop the presale doc (.txt, .pdf, .docx). The form auto-fills with client name, warehouse and volumes — your edits always win.</p>
+        <div class="drop" id="drop">
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#5b8bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>
+            </svg>
+          </div>
+          <strong>DROP PRESALE HERE</strong>
+          <p>or click to browse · .txt · .pdf · .docx · max 10 MB</p>
+          <input type="file" id="file-input" hidden accept=".txt,.pdf,.docx" />
+        </div>
+        <div id="file-info-block"></div>
+        <div id="extracted-block"></div>
+      </section>
+
+      <section class="panel" id="panel-2">
+        <div class="step-tag"><span class="bracket">[</span> STEP 02 <span class="bracket">]</span> :: TARGETING</div>
+        <h2>Client &amp; warehouse</h2>
+        <p class="hint">The warehouse choice picks the rate-card template.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="client-name">Client name</label>
+            <input type="text" id="client-name" placeholder="e.g. Acme Brands" />
+            <div class="helper">OUTPUT: <code id="filename-preview">[Client] Proposal.xlsx</code></div>
+          </div>
+          <div class="field">
+            <label for="warehouse">Warehouse</label>
+            <select id="warehouse"></select>
+            <div class="helper" id="template-tag"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-3">
+        <div class="step-tag"><span class="bracket">[</span> STEP 03 <span class="bracket">]</span> :: LOADOUT</div>
+        <h2>Services &amp; quantities</h2>
+        <p class="hint">Toggle services the client uses. The Rate column previews which FR tier applies as you type.</p>
+        <div id="services-table-host"></div>
+      </section>
+
+      <section class="panel" id="panel-4">
+        <div class="step-tag"><span class="bracket">[</span> STEP 04 <span class="bracket">]</span> :: OVERRIDES · OPTIONAL</div>
+        <h2>Rate overrides</h2>
+        <p class="hint">Leave blank to use standard rates. Only override when Goku has approved a deviation.</p>
+        <details>
+          <summary>SHOW RATE OVERRIDES</summary>
+          <div id="overrides-host" style="margin-top: 14px;"></div>
+        </details>
+      </section>
+
+      <section class="panel" id="panel-5">
+        <div class="step-tag"><span class="bracket">[</span> STEP 05 <span class="bracket">]</span> :: EXECUTE</div>
+        <h2>Generate</h2>
+        <p class="hint">Review the summary on the right, then click. The .xlsx downloads immediately.</p>
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <button class="primary" id="generate-btn">▸ GENERATE PROPOSAL</button>
+          <button class="ghost" id="export-json-btn">EXPORT JSON</button>
+          <button class="ghost" id="reset-btn">RESET</button>
+        </div>
+        <div id="errors" class="errors"></div>
+      </section>
+
+    </div>
+
+    <aside class="right-col">
+      <div class="panel sticky">
+        <div class="step-tag"><span class="bracket">[</span> HUD <span class="bracket">]</span> :: LIVE</div>
+        <h2>Summary</h2>
+        <p class="hint">What the generator will output.</p>
+        <div class="summary" id="summary"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="footer-note">AMZ PREP // PROPOSAL BUILDER // APR.23.2026 FRAMEWORK</div>
+
+  <div class="system-bar">
+    <div class="item"><span class="dot-live"></span><span class="k">STATUS</span><span class="v">READY</span></div>
+    <div class="item"><span class="k">USR</span><span class="v" id="sb-user">—</span></div>
+    <div class="item"><span class="k">WAREHOUSE</span><span class="v" id="sb-wh">—</span></div>
+    <div class="item"><span class="k">SERVICES</span><span class="v" id="sb-svc">0</span></div>
+    <div class="item"><span class="k">TPL</span><span class="v" id="sb-tpl">—</span></div>
+  </div>
 </div>
 
 <script id="logo-data">
@@ -3167,13 +3601,195 @@ window.AMZ_TEMPLATES = {
 };
 </script>
 <script>
-/* ===================================================================
-   AMZ Prep Proposal Builder — UI + xlsx generation
-   =================================================================== */
+/* ==================== THREE.JS HERO ==================== */
+(function threeScene() {
+  if (!window.THREE) { setTimeout(threeScene, 100); return; }
+  const host = document.getElementById('three-host');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 5;
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  host.appendChild(renderer.domElement);
+  const geom = new THREE.IcosahedronGeometry(1.6, 1);
+  const edges = new THREE.EdgesGeometry(geom);
+  const mat = new THREE.LineBasicMaterial({ color: 0x5b8bff, transparent: true, opacity: 0.42 });
+  const mesh = new THREE.LineSegments(edges, mat); scene.add(mesh);
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0x8b5bff, transparent: true, opacity: 0.18, wireframe: true })
+  );
+  scene.add(sphere);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(2.2, 2.21, 64),
+    new THREE.MeshBasicMaterial({ color: 0x5b8bff, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = Math.PI / 3; scene.add(ring);
+  const particleCount = 250;
+  const pg = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i*3]   = (Math.random() - 0.5) * 20;
+    positions[i*3+1] = (Math.random() - 0.5) * 20;
+    positions[i*3+2] = (Math.random() - 0.5) * 20;
+  }
+  pg.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particles = new THREE.Points(pg,
+    new THREE.PointsMaterial({ color: 0xaab8e0, size: 0.025, transparent: true, opacity: 0.55 }));
+  scene.add(particles);
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  let sy = 0; window.addEventListener('scroll', () => { sy = window.scrollY; });
+  function tick() {
+    requestAnimationFrame(tick);
+    mesh.rotation.x += 0.0015; mesh.rotation.y += 0.002;
+    sphere.rotation.x -= 0.003; sphere.rotation.y -= 0.0025;
+    ring.rotation.z += 0.0008; particles.rotation.y += 0.0003;
+    mesh.position.y = sy * -0.0015;
+    sphere.position.y = sy * -0.001;
+    ring.position.y = sy * -0.0018;
+    renderer.render(scene, camera);
+  }
+  tick();
+})();
 
+/* ==================== TRACER ==================== */
+(function tracer() {
+  const c = document.getElementById('tracer');
+  const ctx = c.getContext('2d');
+  function size() {
+    c.width = window.innerWidth * devicePixelRatio;
+    c.height = window.innerHeight * devicePixelRatio;
+    c.style.width = window.innerWidth + 'px';
+    c.style.height = window.innerHeight + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(devicePixelRatio, devicePixelRatio);
+  }
+  size(); window.addEventListener('resize', size);
+  const W = () => window.innerWidth, H = () => window.innerHeight;
+  const lines = [];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  function makeLine() {
+    const side = Math.floor(rand(0, 4));
+    let x1, y1, x2, y2;
+    if (side === 0) { x1 = rand(0, W()); y1 = -60; }
+    else if (side === 1) { x1 = W() + 60; y1 = rand(0, H()); }
+    else if (side === 2) { x1 = rand(0, W()); y1 = H() + 60; }
+    else { x1 = -60; y1 = rand(0, H()); }
+    const es = (side + 2) % 4;
+    if (es === 0) { x2 = rand(0, W()); y2 = -60; }
+    else if (es === 1) { x2 = W() + 60; y2 = rand(0, H()); }
+    else if (es === 2) { x2 = rand(0, W()); y2 = H() + 60; }
+    else { x2 = -60; y2 = rand(0, H()); }
+    return {
+      x1, y1, x2, y2,
+      cp1x: rand(W()*0.2, W()*0.8), cp1y: rand(0, H()),
+      cp2x: rand(W()*0.2, W()*0.8), cp2y: rand(0, H()),
+      progress: 0, speed: rand(0.0012, 0.0028),
+      hue: rand(220, 260), opacity: rand(0.18, 0.45), width: rand(0.6, 1.4),
+    };
+  }
+  for (let i = 0; i < 9; i++) lines.push(makeLine());
+  const bezier = (t, p0, p1, p2, p3) => {
+    const u = 1 - t;
+    return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3;
+  };
+  function draw() {
+    ctx.clearRect(0, 0, W(), H());
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const L = lines[i];
+      L.progress += L.speed;
+      if (L.progress > 1.25) { lines[i] = makeLine(); continue; }
+      const segs = 80;
+      const he = Math.min(1, L.progress);
+      const ts = Math.max(0, L.progress - 0.45);
+      for (let s = 0; s < segs; s++) {
+        const t0 = ts + (he - ts) * (s / segs);
+        const t1 = ts + (he - ts) * ((s + 1) / segs);
+        const x0 = bezier(t0, L.x1, L.cp1x, L.cp2x, L.x2);
+        const y0 = bezier(t0, L.y1, L.cp1y, L.cp2y, L.y2);
+        const x1 = bezier(t1, L.x1, L.cp1x, L.cp2x, L.x2);
+        const y1 = bezier(t1, L.y1, L.cp1y, L.cp2y, L.y2);
+        const fade = (s / segs);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.strokeStyle = `hsla(${L.hue}, 75%, 68%, ${L.opacity * fade})`;
+        ctx.lineWidth = L.width; ctx.lineCap = 'round';
+        ctx.shadowColor = `hsla(${L.hue}, 80%, 65%, 0.6)`;
+        ctx.shadowBlur = 14 * fade;
+        ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ==================== GOOGLE AUTH ==================== */
+const GOOGLE_CLIENT_ID = "REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com";
+const ALLOWED_EMAILS = [];
+const ALLOWED_DOMAINS = ["amzprep.com"];
+function isAllowed(email) {
+  if (!email) return false;
+  email = email.toLowerCase();
+  if (ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) return true;
+  return ALLOWED_DOMAINS.includes(email.split("@")[1]);
+}
+function decodeJwt(t) {
+  const p = t.split("."); if (p.length !== 3) return null;
+  const pl = p[1].replace(/-/g, "+").replace(/_/g, "/");
+  try { return JSON.parse(atob(pl + "===".slice(0, (4 - pl.length % 4) % 4))); }
+  catch { return null; }
+}
+function onSignIn(r) {
+  const c = decodeJwt(r.credential);
+  if (!c || !c.email_verified) return showAuthError("Couldn't verify your Google account.");
+  if (!isAllowed(c.email)) return showAuthError(`${c.email} is not authorised. Ask your admin to add you.`);
+  sessionStorage.setItem("amzp_user", JSON.stringify({ email: c.email, name: c.name, picture: c.picture }));
+  enterApp({ email: c.email, name: c.name, picture: c.picture });
+}
+function showAuthError(m) {
+  const el = document.getElementById("auth-error");
+  el.textContent = m; el.classList.add("show");
+}
+function enterApp(u) {
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("app").classList.add("show");
+  const ui = document.getElementById("user-info"); ui.innerHTML = "";
+  if (u.picture) { const i = document.createElement("img"); i.src = u.picture; i.alt = ""; ui.appendChild(i); }
+  const s = document.createElement("span"); s.textContent = u.email; ui.appendChild(s);
+  const b = document.createElement("button"); b.className = "signout"; b.textContent = "▸ SIGN OUT"; b.onclick = signOut; ui.appendChild(b);
+  document.getElementById("sb-user").textContent = u.email;
+  document.getElementById("tb-session").textContent = u.email.split("@")[0].toUpperCase();
+}
+function signOut() {
+  sessionStorage.removeItem("amzp_user");
+  if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+  document.getElementById("gate").classList.remove("hidden");
+  document.getElementById("app").classList.remove("show");
+}
+function initAuth() {
+  const saved = sessionStorage.getItem("amzp_user");
+  if (saved) { try { const u = JSON.parse(saved); if (isAllowed(u.email)) { enterApp(u); return; } } catch {} }
+  if (!window.google?.accounts?.id) { setTimeout(initAuth, 250); return; }
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID, callback: onSignIn,
+    auto_select: false, cancel_on_tap_outside: false,
+  });
+  window.google.accounts.id.renderButton(document.getElementById("gsi-host"), {
+    type: "standard", theme: "filled_black", size: "large",
+    shape: "pill", text: "signin_with", logo_alignment: "left", width: 300,
+  });
+}
+window.addEventListener("load", initAuth);
+
+/* ==================== APP CORE ==================== */
 const TEMPLATES = window.AMZ_TEMPLATES;
 const LOGO_B64 = window.AMZ_LOGO_B64;
-
 const WAREHOUSE_OPTIONS = (() => {
   const out = [];
   for (const key of Object.keys(TEMPLATES)) {
@@ -3188,13 +3804,12 @@ const state = {
   warehouseId: WAREHOUSE_OPTIONS[0].warehouse,
   templateKey: WAREHOUSE_OPTIONS[0].templateKey,
   clientName: "",
-  services: {},     // { inputLabel: qty }
-  overrides: {},    // { frRow: newPrice }
-  presale: null,    // { name, size, text }
+  services: {},
+  overrides: {},
+  presale: null,
   parsedHints: null,
 };
 
-/* ---------- helpers ---------- */
 function $(id) { return document.getElementById(id); }
 function el(tag, attrs={}, ...kids) {
   const e = document.createElement(tag);
@@ -3218,53 +3833,35 @@ function fmtUSD(n) {
   return "$" + n.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-/* ---------- initial render ---------- */
 function renderWarehouseOptions() {
-  const sel = $("warehouse");
-  sel.innerHTML = "";
+  const sel = $("warehouse"); sel.innerHTML = "";
   for (const opt of WAREHOUSE_OPTIONS) {
     const o = el("option", { value: opt.warehouse }, opt.warehouse);
-    o.dataset.template = opt.templateKey;
     sel.appendChild(o);
   }
-  sel.value = state.warehouseId;
-  updateTemplateTag();
+  sel.value = state.warehouseId; updateTemplateTag();
 }
-
 function updateTemplateTag() {
   const opt = WAREHOUSE_OPTIONS.find(o => o.warehouse === state.warehouseId);
   if (!opt) return;
   state.templateKey = opt.templateKey;
-  $("template-tag").innerHTML =
-    `Template: <span class="pill brand">${opt.displayTemplate}</span>`;
+  $("template-tag").innerHTML = `TEMPLATE: <span class="pill">${opt.displayTemplate}</span>`;
+  $("sb-tpl").textContent = opt.displayTemplate.split(" ")[0].toUpperCase();
 }
 
 function renderServicesTable() {
   const tpl = TEMPLATES[state.templateKey];
-  const host = $("services-table-host");
-  host.innerHTML = "";
-
-  // Build a quick lookup: input label -> { qty_input_row, mapping }
-  const mapByLabel = {};
-  for (const m of tpl.mappings) mapByLabel[m.label] = m;
-
-  // FR row lookup
-  const frByRow = {};
-  for (const r of tpl.frRows) frByRow[r.row] = r;
-
-  // Build by section using calcInputs
+  const host = $("services-table-host"); host.innerHTML = "";
+  const mapByLabel = {}; for (const m of tpl.mappings) mapByLabel[m.label] = m;
   const tbl = el("table", { class: "svc" });
-  const thead = el("thead", {},
+  tbl.appendChild(el("thead", {},
     el("tr", {},
-      el("th", { style: "width: 40px;" }, "Use"),
-      el("th", {}, "Service"),
-      el("th", { style: "width: 130px;" }, "Quantity"),
-      el("th", { style: "width: 130px;" }, "Rate (auto)"),
-    )
-  );
-  tbl.appendChild(thead);
+      el("th", { style: "width: 40px;" }, "USE"),
+      el("th", {}, "SERVICE"),
+      el("th", { style: "width: 130px;" }, "QTY"),
+      el("th", { style: "width: 130px;" }, "RATE")
+    )));
   const tbody = el("tbody");
-
   for (const inp of tpl.calcInputs) {
     if (inp.type === "section") {
       tbody.appendChild(el("tr", { class: "section" }, el("td", { colspan: 4 }, inp.label)));
@@ -3273,62 +3870,40 @@ function renderServicesTable() {
     const mapping = mapByLabel[inp.label];
     const checked = state.services[inp.label] != null;
     const qty = state.services[inp.label] || 0;
-
     const checkbox = el("input", {
-      type: "checkbox",
-      checked: checked,
+      type: "checkbox", checked: checked,
       onchange: (ev) => {
-        if (ev.target.checked) {
-          state.services[inp.label] = qty || 0;
-        } else {
-          delete state.services[inp.label];
-        }
+        if (ev.target.checked) state.services[inp.label] = qty || 0;
+        else delete state.services[inp.label];
         updateSummary();
       }
     });
-
+    const rateCell = el("td", { class: "rate" }, computeRate(tpl, mapping, qty, state.overrides));
     const qtyInput = el("input", {
-      type: "number", min: "0", step: "1", value: qty || "",
-      placeholder: "0",
+      type: "number", min: "0", step: "1", value: qty || "", placeholder: "0",
       oninput: (ev) => {
         const v = parseFloat(ev.target.value) || 0;
-        if (!(inp.label in state.services)) {
-          state.services[inp.label] = v;
-          checkbox.checked = true;
-        } else {
-          state.services[inp.label] = v;
-        }
-        updateRateLabel();
+        if (!(inp.label in state.services)) { state.services[inp.label] = v; checkbox.checked = true; }
+        else { state.services[inp.label] = v; }
+        rateCell.textContent = computeRate(tpl, mapping, v, state.overrides);
         updateSummary();
       }
     });
-
-    function updateRateLabel() {
-      const q = state.services[inp.label] || 0;
-      rateCell.textContent = computeRate(tpl, mapping, q, state.overrides);
-    }
-
-    const rateCell = el("td", { class: "rate" }, computeRate(tpl, mapping, qty, state.overrides));
-
-    tbody.appendChild(
-      el("tr", {},
-        el("td", { class: "toggle" }, checkbox),
-        el("td", { class: "label" }, inp.label),
-        el("td", {}, qtyInput),
-        rateCell
-      )
-    );
+    tbody.appendChild(el("tr", {},
+      el("td", { class: "toggle" }, checkbox),
+      el("td", { class: "label" }, inp.label),
+      el("td", {}, qtyInput),
+      rateCell
+    ));
   }
-  tbl.appendChild(tbody);
-  host.appendChild(tbl);
+  tbl.appendChild(tbody); host.appendChild(tbl);
 }
-
 function computeRate(tpl, mapping, qty, overrides) {
   if (!mapping) return "—";
   const lookup = (row) => {
     if (overrides[row] != null && overrides[row] !== "") return parseFloat(overrides[row]);
     const r = tpl.frRows.find(x => x.row === row);
-    return r ? (typeof r.price === "number" ? r.price : r.price) : null;
+    return r ? r.price : null;
   };
   if (mapping.type === "single") {
     const v = lookup(mapping.fr_row);
@@ -3343,91 +3918,78 @@ function computeRate(tpl, mapping, qty, overrides) {
   }
   return "—";
 }
-
 function renderOverrides() {
-  const host = $("overrides-host");
-  host.innerHTML = "";
+  const host = $("overrides-host"); host.innerHTML = "";
   const tpl = TEMPLATES[state.templateKey];
-  let currentSection = null;
   const wrap = el("div");
   for (const r of tpl.frRows) {
     if (r.type === "section") {
-      currentSection = r.label;
       wrap.appendChild(el("div", { class: "section-title" }, r.label));
       continue;
     }
-    if (typeof r.price !== "number") continue; // skip "Cost + 15%" etc.
+    if (typeof r.price !== "number") continue;
     const inp = el("input", {
       type: "number", step: "0.01", min: "0",
-      placeholder: String(r.price),
-      value: state.overrides[r.row] ?? "",
+      placeholder: String(r.price), value: state.overrides[r.row] ?? "",
       oninput: (ev) => {
         const v = ev.target.value;
         if (v === "" || v == null) delete state.overrides[r.row];
         else state.overrides[r.row] = parseFloat(v);
-        renderServicesTable();
-        updateSummary();
+        renderServicesTable(); updateSummary();
       }
     });
-    wrap.appendChild(
-      el("div", { class: "field-row", style: "margin-bottom: 6px; align-items: center;" },
-        el("div", { style: "font-size: 13px;" }, `${r.label}`),
-        el("div", { style: "display: flex; align-items: center; gap: 8px;" },
-          el("span", { class: "helper", style: "min-width: 56px;" }, fmtUSD(r.price)),
-          inp
-        )
-      )
-    );
+    wrap.appendChild(el("div", { class: "field-row", style: "margin-bottom: 6px; align-items: center;" },
+      el("div", { style: "font-size: 13px;" }, r.label),
+      el("div", { style: "display: flex; align-items: center; gap: 8px;" },
+        el("span", { class: "helper", style: "min-width: 56px;" }, fmtUSD(r.price)), inp)
+    ));
   }
   host.appendChild(wrap);
 }
-
 function updateFilenamePreview() {
   const name = state.clientName.trim();
   $("filename-preview").textContent = (name || "[Client]") + " Proposal.xlsx";
 }
-
 function updateSummary() {
-  const host = $("summary");
+  const host = $("summary"); host.innerHTML = "";
   const tpl = TEMPLATES[state.templateKey];
   const services = Object.entries(state.services).filter(([k, v]) => v > 0);
-  const overrideCount = Object.keys(state.overrides).length;
-
-  host.innerHTML = "";
-  host.appendChild(rowKV("Client", state.clientName || "—"));
-  host.appendChild(rowKV("Warehouse", state.warehouseId));
-  host.appendChild(rowKV("Template", tpl.displayName));
-  host.appendChild(rowKV("Services configured", String(services.length)));
-  host.appendChild(rowKV("Rate overrides", String(overrideCount)));
-  host.appendChild(rowKV("Presale attached", state.presale ? state.presale.name : "—"));
-
-  // Output filename
+  host.appendChild(rowKV("CLIENT", state.clientName || "—"));
+  host.appendChild(rowKV("WAREHOUSE", state.warehouseId));
+  host.appendChild(rowKV("TEMPLATE", tpl.displayName));
+  host.appendChild(rowKV("SERVICES", String(services.length)));
+  host.appendChild(rowKV("OVERRIDES", String(Object.keys(state.overrides).length)));
+  host.appendChild(rowKV("PRESALE", state.presale ? state.presale.name : "—"));
   const fn = (state.clientName.trim() || "[Client]") + " Proposal.xlsx";
-  host.appendChild(el("div", { style: "margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);" },
-    el("div", { class: "helper", style: "margin-bottom: 4px;" }, "Output filename:"),
-    el("div", { style: "font-family: monospace; font-size: 12px; word-break: break-all;" }, fn)
+  host.appendChild(el("div", { style: "margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);" },
+    el("div", { class: "helper", style: "margin-bottom: 4px;" }, "OUTPUT:"),
+    el("div", { style: "font-family: var(--mono); font-size: 12px; color: var(--accent); word-break: break-all;" }, fn)
   ));
-
-  // Service preview
-  if (services.length) {
-    const list = el("div", { style: "margin-top: 12px;" });
-    list.appendChild(el("div", { class: "helper", style: "margin-bottom: 4px;" }, "Services:"));
-    for (const [label, qty] of services) {
-      list.appendChild(el("div", { class: "row" },
-        el("div", {}, label),
-        el("div", { class: "v" }, qty.toLocaleString())));
-    }
-    host.appendChild(list);
-  }
+  $("sb-wh").textContent = state.warehouseId.split(" ")[0].toUpperCase();
+  $("sb-svc").textContent = String(services.length);
+  updateStepProgress();
 }
 function rowKV(k, v) {
-  return el("div", { class: "row" }, el("div", {}, k), el("div", { class: "v" }, v));
+  return el("div", { class: "row" }, el("div", { class: "k" }, k), el("div", { class: "v" }, v));
+}
+function updateStepProgress() {
+  const segs = document.querySelectorAll(".step-progress .seg");
+  const done = [
+    !!state.presale,
+    !!state.clientName.trim(),
+    Object.values(state.services).some(v => v > 0),
+    Object.keys(state.overrides).length > 0,
+    false,
+  ];
+  segs.forEach((s, i) => {
+    s.classList.toggle("done", done[i]);
+    s.classList.toggle("active", !done[i] && (i === 0 || done[i-1]));
+  });
 }
 
 /* ---------- presale upload & parse ---------- */
 function setupDropZone() {
-  const drop = $("drop");
-  const input = $("file-input");
+  const drop = $("drop"); const input = $("file-input");
   drop.addEventListener("click", () => input.click());
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragging"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("dragging"));
@@ -3435,51 +3997,30 @@ function setupDropZone() {
     e.preventDefault(); drop.classList.remove("dragging");
     if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
   });
-  input.addEventListener("change", (e) => {
-    if (e.target.files.length) handleFile(e.target.files[0]);
-  });
+  input.addEventListener("change", (e) => { if (e.target.files.length) handleFile(e.target.files[0]); });
 }
-
 async function handleFile(file) {
-  if (file.size > 10 * 1024 * 1024) {
-    showFileError("File is over 10 MB — please trim it down or convert to .txt.");
-    return;
-  }
+  if (file.size > 10 * 1024 * 1024) { showFileError("FILE > 10 MB · TRIM OR CONVERT TO .TXT"); return; }
   state.presale = { name: file.name, size: file.size, text: "" };
   $("file-info-block").innerHTML = "";
-  $("file-info-block").appendChild(
-    el("div", { class: "file-info" },
-      el("span", {}, `${file.name} (${(file.size/1024).toFixed(1)} KB)`),
-      el("button", { class: "ghost", onclick: clearFile }, "Clear")
-    )
-  );
-
+  $("file-info-block").appendChild(el("div", { class: "file-info" },
+    el("span", {}, `▸ ${file.name} (${(file.size/1024).toFixed(1)} KB)`),
+    el("button", { class: "ghost", onclick: clearFile }, "CLEAR")));
   try {
     let text = "";
     const ext = file.name.split(".").pop().toLowerCase();
-    if (ext === "txt" || ext === "md") {
-      text = await file.text();
-    } else if (ext === "pdf") {
-      text = await extractPdfText(file);
-    } else if (ext === "docx") {
-      text = await extractDocxText(file);
-    } else {
-      text = await file.text();
-    }
+    if (ext === "txt" || ext === "md") text = await file.text();
+    else if (ext === "pdf") text = await extractPdfText(file);
+    else if (ext === "docx") text = await extractDocxText(file);
+    else text = await file.text();
     state.presale.text = text;
     const hints = parseHintsFromText(text);
     state.parsedHints = hints;
-    applyHints(hints);
-    renderExtracted(hints);
-  } catch (err) {
-    console.error(err);
-    showFileError("Couldn't parse this file. You can still continue and fill in manually.");
-  }
+    applyHints(hints); renderExtracted(hints);
+  } catch (err) { console.error(err); showFileError("PARSE ERROR · CONTINUE MANUALLY"); }
   updateSummary();
 }
-
 async function extractPdfText(file) {
-  // Lazy-load pdf.js
   if (!window.pdfjsLib) {
     await loadScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js");
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -3489,16 +4030,13 @@ async function extractPdfText(file) {
   const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
   let text = "";
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const tc = await page.getTextContent();
+    const page = await pdf.getPage(i); const tc = await page.getTextContent();
     text += tc.items.map(it => it.str).join(" ") + "\n";
   }
   return text;
 }
 async function extractDocxText(file) {
-  if (!window.mammoth) {
-    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js");
-  }
+  if (!window.mammoth) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js");
   const buf = await file.arrayBuffer();
   const res = await window.mammoth.extractRawText({ arrayBuffer: buf });
   return res.value;
@@ -3510,27 +4048,18 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
-
 function clearFile() {
-  state.presale = null;
-  state.parsedHints = null;
-  $("file-info-block").innerHTML = "";
-  $("extracted-block").innerHTML = "";
-  $("file-input").value = "";
-  updateSummary();
+  state.presale = null; state.parsedHints = null;
+  $("file-info-block").innerHTML = ""; $("extracted-block").innerHTML = "";
+  $("file-input").value = ""; updateSummary();
 }
 function showFileError(msg) {
   $("file-info-block").innerHTML = "";
   $("file-info-block").appendChild(el("div", { class: "errors" }, msg));
 }
-
-/* ---------- heuristic presale parser ---------- */
 function parseHintsFromText(text) {
   if (!text) return {};
-  const out = {};
-  const lc = text.toLowerCase();
-
-  // Client / company name
+  const out = {}; const lc = text.toLowerCase();
   const nameMatches = [
     /(?:client|company|brand|account|customer)\s*[:\-]\s*([A-Z][A-Za-z0-9 &.,'\-]{1,60})/,
     /(?:for|to)\s+([A-Z][A-Za-z0-9 &.,'\-]{2,40}?)(?:\s+(?:llc|inc|co|corp)\b)?\s*[\n,]/,
@@ -3539,41 +4068,27 @@ function parseHintsFromText(text) {
     const m = text.match(re);
     if (m) { out.clientName = m[1].trim().replace(/\s+/g, " "); break; }
   }
-
-  // Warehouse mentions
   const warehouseMap = {
     "black mountain": "ES+ (Black Mountain / Las Vegas)",
     "es+": "ES+ (Black Mountain / Las Vegas)",
-    "dothan": "Dothan (Alabama)",
-    "alabama": "Dothan (Alabama)",
-    "kitting": "Kitting & Assembly (CO)",
-    "k&a": "Kitting & Assembly (CO)",
-    "qualfon las vegas": "Qualfon Las Vegas",
-    "qualfon michigan": "Qualfon Michigan",
-    "qualfon pennsylvania": "Qualfon Pennsylvania",
-    "qualfon pa": "Qualfon Pennsylvania",
-    "selery california": "Selery California",
-    "selery chicago": "Selery Chicago",
-    "selery dallas": "Selery Dallas",
-    "selery orlando": "Selery Orlando",
-    "selery utah": "Selery Utah",
-    "selery": "Selery California",
-    "shipmate": "Shipmate (Philadelphia)",
-    "philadelphia": "Shipmate (Philadelphia)",
-    "upstate": "Upstate (South Carolina)",
-    "south carolina": "Upstate (South Carolina)",
+    "dothan": "Dothan (Alabama)", "alabama": "Dothan (Alabama)",
+    "kitting": "Kitting & Assembly (CO)", "k&a": "Kitting & Assembly (CO)",
+    "qualfon las vegas": "Qualfon Las Vegas", "qualfon michigan": "Qualfon Michigan",
+    "qualfon pennsylvania": "Qualfon Pennsylvania", "qualfon pa": "Qualfon Pennsylvania",
+    "selery california": "Selery California", "selery chicago": "Selery Chicago",
+    "selery dallas": "Selery Dallas", "selery orlando": "Selery Orlando",
+    "selery utah": "Selery Utah", "selery": "Selery California",
+    "shipmate": "Shipmate (Philadelphia)", "philadelphia": "Shipmate (Philadelphia)",
+    "upstate": "Upstate (South Carolina)", "south carolina": "Upstate (South Carolina)",
     "unis": "UNIS",
   };
   for (const k of Object.keys(warehouseMap)) {
     if (lc.includes(k)) { out.warehouse = warehouseMap[k]; break; }
   }
-
-  // Volume hints — DTC orders, FBA cases, etc.
   const vol = {};
   function findNum(patterns) {
     for (const re of patterns) {
-      const m = text.match(re);
-      if (m) return parseInt(m[1].replace(/,/g, ""), 10);
+      const m = text.match(re); if (m) return parseInt(m[1].replace(/,/g, ""), 10);
     }
     return null;
   }
@@ -3586,31 +4101,19 @@ function parseHintsFromText(text) {
     /fba[^\n\d]{0,40}?(\d{1,3}(?:,\d{3})*|\d+)\s*(?:cases?|\/month|per month)/i,
     /(\d{1,3}(?:,\d{3})*|\d+)\s+fba\s+cases/i,
   ]);
-  vol.b2bCases = findNum([
-    /b2b[^\n\d]{0,40}?(\d{1,3}(?:,\d{3})*|\d+)\s*(?:cases?|\/month|per month)/i,
-  ]);
-  vol.pallets = findNum([
-    /(\d{1,3}(?:,\d{3})*|\d+)\s+pallets?/i,
-  ]);
-  vol.bins = findNum([
-    /(\d{1,3}(?:,\d{3})*|\d+)\s+bins?/i,
-  ]);
-  vol.fnsku = findNum([
-    /(?:fnsku|labelling|labeling)[^\n\d]{0,40}?(\d{1,3}(?:,\d{3})*|\d+)/i,
-  ]);
+  vol.b2bCases = findNum([/b2b[^\n\d]{0,40}?(\d{1,3}(?:,\d{3})*|\d+)\s*(?:cases?|\/month|per month)/i]);
+  vol.pallets  = findNum([/(\d{1,3}(?:,\d{3})*|\d+)\s+pallets?/i]);
+  vol.bins     = findNum([/(\d{1,3}(?:,\d{3})*|\d+)\s+bins?/i]);
+  vol.fnsku    = findNum([/(?:fnsku|labelling|labeling)[^\n\d]{0,40}?(\d{1,3}(?:,\d{3})*|\d+)/i]);
   out.volumes = vol;
-
-  // DTC tier suggestion based on volume
   if (vol.dtcOrders != null) {
     if (vol.dtcOrders <= 500) out.dtcTier = "$1.80 (≤500/mo)";
     else if (vol.dtcOrders <= 1000) out.dtcTier = "$1.65 (501–1,000/mo)";
     else if (vol.dtcOrders <= 2500) out.dtcTier = "$1.50 (1,001–2,500/mo)";
     else out.dtcTier = "$1.25 (2,501+/mo)";
   }
-
   return out;
 }
-
 function applyHints(hints) {
   if (hints.clientName && !state.clientName) {
     state.clientName = hints.clientName;
@@ -3622,14 +4125,11 @@ function applyHints(hints) {
     if (exists) {
       state.warehouseId = hints.warehouse;
       $("warehouse").value = hints.warehouse;
-      updateTemplateTag();
-      renderServicesTable();
-      renderOverrides();
+      updateTemplateTag(); renderServicesTable(); renderOverrides();
     }
   }
   if (hints.volumes) {
-    const v = hints.volumes;
-    const tpl = TEMPLATES[state.templateKey];
+    const v = hints.volumes; const tpl = TEMPLATES[state.templateKey];
     const has = (label) => tpl.calcInputs.some(i => i.label === label);
     if (v.dtcOrders && has("DTC Orders")) state.services["DTC Orders"] = v.dtcOrders;
     if (v.fbaCases && has("FBA Cases")) state.services["FBA Cases"] = v.fbaCases;
@@ -3641,39 +4141,34 @@ function applyHints(hints) {
   }
   updateSummary();
 }
-
 function renderExtracted(h) {
-  const host = $("extracted-block");
-  host.innerHTML = "";
+  const host = $("extracted-block"); host.innerHTML = "";
   if (!h || Object.keys(h).length === 0) {
-    host.appendChild(el("div", { class: "helper" }, "No fields auto-detected. Fill in manually."));
+    host.appendChild(el("div", { class: "helper" }, "NO FIELDS AUTO-DETECTED · FILL MANUALLY"));
     return;
   }
   const box = el("div", { class: "extracted" });
-  box.appendChild(el("div", { style: "font-weight: 600; margin-bottom: 6px;" }, "Auto-detected from presale"));
+  box.appendChild(el("div", { class: "head" }, "AUTO-DETECTED FROM PRESALE"));
   const add = (lbl, val) => {
     if (val == null || val === "") return;
     box.appendChild(el("div", { class: "row" },
-      el("div", { class: "lbl" }, lbl), el("div", {}, String(val))));
+      el("div", { class: "lbl" }, lbl), el("div", { class: "val" }, String(val))));
   };
-  add("Client", h.clientName);
-  add("Warehouse", h.warehouse);
-  add("DTC tier guess", h.dtcTier);
+  add("CLIENT", h.clientName);
+  add("WAREHOUSE", h.warehouse);
+  add("DTC TIER", h.dtcTier);
   if (h.volumes) {
-    if (h.volumes.dtcOrders) add("DTC orders", h.volumes.dtcOrders.toLocaleString());
-    if (h.volumes.fbaCases) add("FBA cases", h.volumes.fbaCases.toLocaleString());
-    if (h.volumes.b2bCases) add("B2B cases", h.volumes.b2bCases.toLocaleString());
-    if (h.volumes.pallets) add("Pallets", h.volumes.pallets.toLocaleString());
-    if (h.volumes.bins) add("Bins", h.volumes.bins.toLocaleString());
-    if (h.volumes.fnsku) add("FNSKU items", h.volumes.fnsku.toLocaleString());
+    if (h.volumes.dtcOrders) add("DTC ORDERS", h.volumes.dtcOrders.toLocaleString());
+    if (h.volumes.fbaCases)  add("FBA CASES",  h.volumes.fbaCases.toLocaleString());
+    if (h.volumes.b2bCases)  add("B2B CASES",  h.volumes.b2bCases.toLocaleString());
+    if (h.volumes.pallets)   add("PALLETS",    h.volumes.pallets.toLocaleString());
+    if (h.volumes.bins)      add("BINS",       h.volumes.bins.toLocaleString());
+    if (h.volumes.fnsku)     add("FNSKU",      h.volumes.fnsku.toLocaleString());
   }
   host.appendChild(box);
 }
 
-/* ===================================================================
-   xlsx generation — uses ExcelJS
-   =================================================================== */
-
+/* ==================== XLSX GENERATION ==================== */
 const BLUE_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF5B95F9" }, bgColor: { argb: "FF5B95F9" } };
 const F3F3F3_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F3F3" } };
 const D9D9D9_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" } };
@@ -3683,119 +4178,63 @@ const WHITE_BOLD = { name: "Arial", bold: true, color: { argb: "FFFFFFFF" }, siz
 const BLUE_BOLD = { name: "Arial", bold: true, color: { argb: "FF5B95F9" }, size: 11 };
 const BLACK_FONT = { name: "Arial", color: { argb: "FF000000" }, size: 10 };
 const BLACK_BOLD = { name: "Arial", bold: true, color: { argb: "FF000000" }, size: 10 };
-
 const THIN = { style: "thin", color: { argb: "FF000000" } };
 const MEDIUM = { style: "medium", color: { argb: "FF000000" } };
-function border(L, R, T, B) {
-  return { left: L || undefined, right: R || undefined, top: T || undefined, bottom: B || undefined };
-}
+function border(L, R, T, B) { return { left: L||undefined, right: R||undefined, top: T||undefined, bottom: B||undefined }; }
 
 async function generateProposal() {
   const tpl = TEMPLATES[state.templateKey];
-  if (!state.clientName.trim()) {
-    showErrors(["Client name is required."]);
-    return;
-  }
-  $("generate-btn").disabled = true;
-  $("generate-btn").textContent = "Generating…";
-  showErrors([]);
-
+  if (!state.clientName.trim()) { showErrors(["CLIENT NAME REQUIRED."]); return; }
+  $("generate-btn").disabled = true; $("generate-btn").textContent = "▸ GENERATING…"; showErrors([]);
   try {
     const wb = new ExcelJS.Workbook();
-    wb.creator = "AMZ Prep Proposal Builder";
-    wb.created = new Date();
-
-    // Embed logo
-    const logoId = wb.addImage({
-      base64: "data:image/png;base64," + LOGO_B64,
-      extension: "png",
-    });
-
+    wb.creator = "AMZ Prep Proposal Builder"; wb.created = new Date();
+    const logoId = wb.addImage({ base64: "data:image/png;base64," + LOGO_B64, extension: "png" });
     buildFRSheet(wb, tpl, logoId);
     buildCalcSheet(wb, tpl, logoId);
     buildZMSheet(wb, logoId);
-
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const fn = (state.clientName.trim() || "Client") + " Proposal.xlsx";
-    saveAs(blob, fn);
+    saveAs(blob, (state.clientName.trim() || "Client") + " Proposal.xlsx");
   } catch (err) {
     console.error(err);
-    showErrors([`Generation failed: ${err.message}`]);
+    showErrors([`GENERATION FAILED · ${err.message}`]);
   } finally {
     $("generate-btn").disabled = false;
-    $("generate-btn").textContent = "Generate proposal .xlsx";
+    $("generate-btn").textContent = "▸ GENERATE PROPOSAL";
   }
 }
 
 function buildFRSheet(wb, tpl, logoId) {
   const ws = wb.addWorksheet("Fulfillment Rates", { views: [{ showGridLines: false }] });
-
-  // Column widths (matches Dothan template)
-  ws.getColumn(1).width = 2.63;    // A
-  ws.getColumn(2).width = 40.13;   // B
-  ws.getColumn(3).width = 12.63;   // C
-  ws.getColumn(4).width = 27.63;   // D
-  ws.getColumn(5).width = 2.63;    // E
-
-  // Logo top
-  ws.addImage(logoId, {
-    tl: { col: 1.225, row: 1.02 },       // approx col 1+0.225, row 1+0.02
-    ext: { width: 317, height: 71 },     // EMU 3019425/9525 ~= 317px ; 676275/9525 ~= 71px
-    editAs: "oneCell",
-  });
-
-  // Iterate FR rows
-  let dataRowCount = 0;
+  ws.getColumn(1).width = 2.63; ws.getColumn(2).width = 40.13;
+  ws.getColumn(3).width = 12.63; ws.getColumn(4).width = 27.63; ws.getColumn(5).width = 2.63;
+  ws.addImage(logoId, { tl: { col: 1.225, row: 1.02 }, ext: { width: 317, height: 71 }, editAs: "oneCell" });
+  let dataCount = 0;
   for (const r of tpl.frRows) {
     const row = ws.getRow(r.row);
     if (r.type === "section") {
-      // Merge B:E and apply blue header
       ws.mergeCells(r.row, 2, r.row, 5);
-      const c = row.getCell(2);
-      c.value = r.label;
-      c.fill = BLUE_FILL;
-      c.font = WHITE_BOLD;
+      const c = row.getCell(2); c.value = r.label; c.fill = BLUE_FILL; c.font = WHITE_BOLD;
       c.alignment = { horizontal: "center", vertical: "center" };
       c.border = border(THIN, THIN, THIN, THIN);
     } else {
-      dataRowCount++;
-      const isOdd = dataRowCount % 2 === 1;
-      const fill = isOdd ? F3F3F3_FILL : D9D9D9_FILL;
-
-      // B: label
-      const b = row.getCell(2);
-      b.value = r.label;
-      b.fill = fill;
-      b.font = BLACK_FONT;
-      b.alignment = { horizontal: "left", vertical: "center", wrapText: true };
-      b.border = border(THIN, THIN, THIN, THIN);
-
-      // C: price (override if set)
+      dataCount++;
+      const fill = dataCount % 2 === 1 ? F3F3F3_FILL : D9D9D9_FILL;
       const override = state.overrides[r.row];
       const price = (override != null && override !== "") ? parseFloat(override) : r.price;
-      const c = row.getCell(3);
-      c.value = price;
-      if (typeof price === "number") c.numFmt = '"$"#,##0.00';
-      c.fill = fill;
-      c.font = BLACK_FONT;
-      c.alignment = { horizontal: "center", vertical: "center" };
+      const b = row.getCell(2); b.value = r.label; b.fill = fill; b.font = BLACK_FONT;
+      b.alignment = { horizontal: "left", vertical: "center", wrapText: true };
+      b.border = border(THIN, THIN, THIN, THIN);
+      const c = row.getCell(3); c.value = price; if (typeof price === "number") c.numFmt = '"$"#,##0.00';
+      c.fill = fill; c.font = BLACK_FONT; c.alignment = { horizontal: "center", vertical: "center" };
       c.border = border(THIN, THIN, THIN, THIN);
-
-      // D:E merged — unit/description
       ws.mergeCells(r.row, 4, r.row, 5);
-      const d = row.getCell(4);
-      d.value = r.unit || "";
-      d.fill = fill;
-      d.font = BLACK_FONT;
+      const d = row.getCell(4); d.value = r.unit || ""; d.fill = fill; d.font = BLACK_FONT;
       d.alignment = { horizontal: "center", vertical: "center", wrapText: true };
       d.border = border(THIN, THIN, THIN, THIN);
-      // E inherits but we still set right thin border explicitly via merged cell
     }
   }
-
-  // Last data row: medium bottom border on col B
-  // Find the last rate row
   const lastRateRow = [...tpl.frRows].reverse().find(r => r.type === "rate");
   if (lastRateRow) {
     const cell = ws.getCell(lastRateRow.row, 2);
@@ -3805,193 +4244,97 @@ function buildFRSheet(wb, tpl, logoId) {
 
 function buildCalcSheet(wb, tpl, logoId) {
   const ws = wb.addWorksheet("Sample Invoice Calculator", { views: [{ showGridLines: false }] });
-
-  // Column widths (matches Dothan calc template)
-  ws.getColumn(1).width = 2.63;     // A
-  ws.getColumn(2).width = 2.63;     // B
-  ws.getColumn(3).width = 27.63;    // C — Service
-  ws.getColumn(4).width = 10.13;    // D — Qty
-  ws.getColumn(5).width = 13.88;    // E — Unit Price
-  ws.getColumn(6).width = 16.38;    // F — Total
-  ws.getColumn(7).width = 2.63;     // G
-  ws.getColumn(8).width = 2.63;     // H
-  ws.getColumn(9).width = 25.13;    // I — INPUTS labels
-  ws.getColumn(10).width = 13.88;   // J — INPUTS values
-
-  // Row 1 height for logo
+  ws.getColumn(1).width = 2.63; ws.getColumn(2).width = 2.63;
+  ws.getColumn(3).width = 27.63; ws.getColumn(4).width = 10.13;
+  ws.getColumn(5).width = 13.88; ws.getColumn(6).width = 16.38;
+  ws.getColumn(7).width = 2.63; ws.getColumn(8).width = 2.63;
+  ws.getColumn(9).width = 25.13; ws.getColumn(10).width = 13.88;
   ws.getRow(1).height = 60;
-
-  // Logo top
-  ws.addImage(logoId, {
-    tl: { col: 2.225, row: 0.05 },
-    ext: { width: 317, height: 71 },
-    editAs: "oneCell",
-  });
-
-  // PRICING CALCULATOR header (C2:F5)
+  ws.addImage(logoId, { tl: { col: 2.225, row: 0.05 }, ext: { width: 317, height: 71 }, editAs: "oneCell" });
   ws.mergeCells("C2:F5");
-  const pc = ws.getCell("C2");
-  pc.value = "PRICING CALCULATOR";
-  pc.fill = BLUE_FILL;
-  pc.font = WHITE_BOLD;
+  const pc = ws.getCell("C2"); pc.value = "PRICING CALCULATOR"; pc.fill = BLUE_FILL; pc.font = WHITE_BOLD;
   pc.alignment = { horizontal: "center", vertical: "center" };
   pc.border = { left: THIN, right: MEDIUM, top: MEDIUM, bottom: MEDIUM };
-
-  // INPUTS header (I2:J5)
   ws.mergeCells("I2:J5");
-  const ih = ws.getCell("I2");
-  ih.value = "INPUTS";
-  ih.fill = BLUE_FILL;
-  ih.font = WHITE_BOLD;
+  const ih = ws.getCell("I2"); ih.value = "INPUTS"; ih.fill = BLUE_FILL; ih.font = WHITE_BOLD;
   ih.alignment = { horizontal: "center", vertical: "center" };
   ih.border = { left: MEDIUM, right: MEDIUM, top: MEDIUM, bottom: MEDIUM };
-
-  // Calc table column headers @ row 8
   const headers = ["Service", "Qty", "Unit Price", "Total"];
   for (let i = 0; i < 4; i++) {
     const cell = ws.getCell(8, 3 + i);
-    cell.value = headers[i];
-    cell.fill = BLUE_FILL;
-    cell.font = WHITE_BOLD;
+    cell.value = headers[i]; cell.fill = BLUE_FILL; cell.font = WHITE_BOLD;
     cell.alignment = { horizontal: "center", vertical: "center" };
-    cell.border = {
-      left: THIN, right: i === 3 ? MEDIUM : THIN, top: THIN, bottom: undefined
-    };
+    cell.border = { left: THIN, right: i === 3 ? MEDIUM : THIN, top: THIN };
   }
-
-  // Build INPUTS column (I/J) using template inputs
-  const inputRowByLabel = {};
   for (const inp of tpl.calcInputs) {
     const r = ws.getRow(inp.row);
+    const i = r.getCell(9), j = r.getCell(10);
     if (inp.type === "section") {
-      const i = r.getCell(9);
-      i.value = inp.label;
-      i.font = BLUE_BOLD;
+      i.value = inp.label; i.font = BLUE_BOLD;
       i.alignment = { horizontal: "right", vertical: "center" };
       i.border = border(THIN, THIN, THIN, THIN);
-      const j = r.getCell(10);
       j.border = border(THIN, THIN, THIN, THIN);
     } else {
-      const i = r.getCell(9);
-      i.value = inp.label;
-      i.font = BLACK_FONT;
+      i.value = inp.label; i.font = BLACK_FONT;
       i.alignment = { horizontal: "right", vertical: "center" };
       i.border = border(THIN, THIN, THIN, THIN);
-      const j = r.getCell(10);
       j.value = state.services[inp.label] != null ? state.services[inp.label] : 0;
-      j.fill = SOFT_BLUE_FILL;
-      j.font = BLACK_FONT;
+      j.fill = SOFT_BLUE_FILL; j.font = BLACK_FONT;
       j.alignment = { horizontal: "center", vertical: "center" };
       j.border = border(THIN, THIN, THIN, THIN);
-      inputRowByLabel[inp.label] = inp.row;
     }
   }
-
-  // Build the calc DATA rows (C9-F{n}) — one row per mapping
-  // Static, Excel-compatible: each row pulls qty from its J input + unit price from FR via IF chain or direct ref
   let calcRow = 9;
   for (const m of tpl.mappings) {
     const r = ws.getRow(calcRow);
-    const idx = calcRow - 9;
-    const isOdd = idx % 2 === 0; // R9 = first = odd (F3F3F3)
-    const fill = isOdd ? F3F3F3_FILL : D9D9D9_FILL;
-
-    // C: service name
-    const c = r.getCell(3);
-    c.value = m.label;
-    c.fill = fill;
-    c.font = BLACK_FONT;
+    const fill = (calcRow - 9) % 2 === 0 ? F3F3F3_FILL : D9D9D9_FILL;
+    const c = r.getCell(3); c.value = m.label; c.fill = fill; c.font = BLACK_FONT;
     c.alignment = { horizontal: "left", vertical: "center", wrapText: true };
     c.border = border(THIN, THIN, THIN, THIN);
-
-    // D: qty — formula refs INPUT cell
     const qtyCell = `J${m.qty_input_row}`;
-    const d = r.getCell(4);
-    d.value = { formula: qtyCell };
-    d.fill = fill;
-    d.font = BLACK_FONT;
-    d.alignment = { horizontal: "center", vertical: "center" };
-    d.border = border(THIN, THIN, THIN, THIN);
-
-    // E: unit price (tier or single)
-    const e = r.getCell(5);
-    e.value = { formula: buildPriceFormula(m, qtyCell) };
-    e.fill = fill;
-    e.font = BLACK_FONT;
-    e.alignment = { horizontal: "center", vertical: "center" };
-    e.numFmt = '"$"#,##0.00';
-    e.border = border(THIN, THIN, THIN, THIN);
-
-    // F: total = D*E
-    const f = r.getCell(6);
-    f.value = { formula: `D${calcRow}*E${calcRow}` };
-    f.fill = fill;
-    f.font = BLACK_FONT;
-    f.alignment = { horizontal: "right", vertical: "center" };
-    f.numFmt = '"$"#,##0.00';
-    f.border = border(THIN, MEDIUM, THIN, THIN);
-
+    const d = r.getCell(4); d.value = { formula: qtyCell }; d.fill = fill; d.font = BLACK_FONT;
+    d.alignment = { horizontal: "center", vertical: "center" }; d.border = border(THIN, THIN, THIN, THIN);
+    const e = r.getCell(5); e.value = { formula: buildPriceFormula(m, qtyCell) };
+    e.fill = fill; e.font = BLACK_FONT; e.numFmt = '"$"#,##0.00';
+    e.alignment = { horizontal: "center", vertical: "center" }; e.border = border(THIN, THIN, THIN, THIN);
+    const f = r.getCell(6); f.value = { formula: `D${calcRow}*E${calcRow}` };
+    f.fill = fill; f.font = BLACK_FONT; f.numFmt = '"$"#,##0.00';
+    f.alignment = { horizontal: "right", vertical: "center" }; f.border = border(THIN, MEDIUM, THIN, THIN);
     calcRow++;
   }
-
-  // Subtotal row at calcRow+1 (with blank space)
   const subtotalRow = Math.max(calcRow, 31);
   const totalRow = subtotalRow + 2;
-
-  // E{subtotal}: "Subtotal" right-aligned bold
   const sE = ws.getCell(subtotalRow, 5);
-  sE.value = "Subtotal";
-  sE.font = BLACK_BOLD;
+  sE.value = "Subtotal"; sE.font = BLACK_BOLD;
   sE.alignment = { horizontal: "right", vertical: "center" };
   sE.border = { top: THIN, bottom: THIN };
-
   const sF = ws.getCell(subtotalRow, 6);
   sF.value = { formula: `IFERROR(SUM(F9:F${calcRow - 1}),0)` };
-  sF.font = BLACK_BOLD;
+  sF.font = BLACK_BOLD; sF.numFmt = '"$"#,##0.00';
   sF.alignment = { horizontal: "right", vertical: "center" };
-  sF.numFmt = '"$"#,##0.00';
   sF.border = { top: THIN, right: MEDIUM, bottom: THIN };
-
-  // Total Per Order — merged E{total}:E{total+1} and F{total}:F{total+1}, blue/white
   ws.mergeCells(totalRow, 5, totalRow + 1, 5);
   ws.mergeCells(totalRow, 6, totalRow + 1, 6);
-  const tE = ws.getCell(totalRow, 5);
-  tE.value = "Total Per Order";
-  tE.fill = TOTAL_BLUE_FILL;
-  tE.font = WHITE_BOLD;
+  const tE = ws.getCell(totalRow, 5); tE.value = "Total Per Order";
+  tE.fill = TOTAL_BLUE_FILL; tE.font = WHITE_BOLD;
   tE.alignment = { horizontal: "center", vertical: "center" };
   tE.border = { left: MEDIUM, right: MEDIUM, top: MEDIUM, bottom: MEDIUM };
   const tF = ws.getCell(totalRow, 6);
-  // DTC Orders qty drives "per order" — fall back to 1 if zero
   tF.value = { formula: `IFERROR(F${subtotalRow}/IF(J${tpl.totalPerOrderInputRow}>0,J${tpl.totalPerOrderInputRow},1),"")` };
-  tF.fill = TOTAL_BLUE_FILL;
-  tF.font = WHITE_BOLD;
+  tF.fill = TOTAL_BLUE_FILL; tF.font = WHITE_BOLD; tF.numFmt = '"$"#,##0.00';
   tF.alignment = { horizontal: "center", vertical: "center" };
-  tF.numFmt = '"$"#,##0.00';
   tF.border = { left: MEDIUM, right: MEDIUM, top: MEDIUM, bottom: MEDIUM };
-
-  // Force row heights for total to be tall enough
-  ws.getRow(totalRow).height = 22;
-  ws.getRow(totalRow + 1).height = 22;
+  ws.getRow(totalRow).height = 22; ws.getRow(totalRow + 1).height = 22;
 }
 
 function buildPriceFormula(mapping, qtyCellRef) {
-  if (mapping.type === "single") {
-    return `'Fulfillment Rates'!C${mapping.fr_row}`;
-  }
-  // tiered: build nested IF
-  const tiers = mapping.tiers;
-  let expr = "";
-  let openCount = 0;
-  for (let i = 0; i < tiers.length; i++) {
-    const t = tiers[i];
+  if (mapping.type === "single") return `'Fulfillment Rates'!C${mapping.fr_row}`;
+  let expr = ""; let openCount = 0;
+  for (let i = 0; i < mapping.tiers.length; i++) {
+    const t = mapping.tiers[i];
     const val = t.fr_row ? `'Fulfillment Rates'!C${t.fr_row}` : String(t.literal);
-    if (t.max_qty == null) {
-      expr += val;
-    } else {
-      expr += `IF(${qtyCellRef}<=${t.max_qty},${val},`;
-      openCount++;
-    }
+    if (t.max_qty == null) expr += val;
+    else { expr += `IF(${qtyCellRef}<=${t.max_qty},${val},`; openCount++; }
   }
   expr += ")".repeat(openCount);
   return expr;
@@ -3999,84 +4342,62 @@ function buildPriceFormula(mapping, qtyCellRef) {
 
 function buildZMSheet(wb, logoId) {
   const ws = wb.addWorksheet("Zone Mapping", { views: [{ showGridLines: false }] });
-  ws.getColumn(1).width = 2.63;
-  ws.getColumn(2).width = 40;
-  ws.getColumn(3).width = 40;
-  ws.getColumn(4).width = 40;
-  // Logo top — placeholder for zone map image
-  ws.addImage(logoId, {
-    tl: { col: 1.225, row: 1.02 },
-    ext: { width: 317, height: 71 },
-    editAs: "oneCell",
-  });
-  // Add a note for now
+  ws.getColumn(1).width = 2.63; ws.getColumn(2).width = 40;
+  ws.getColumn(3).width = 40; ws.getColumn(4).width = 40;
+  ws.addImage(logoId, { tl: { col: 1.225, row: 1.02 }, ext: { width: 317, height: 71 }, editAs: "oneCell" });
   ws.getCell("B8").value = "Zone map image — TODO add via /assets/maps/{warehouse}.png in your hosted repo";
   ws.getCell("B8").font = { name: "Arial", italic: true, color: { argb: "FF888888" }, size: 11 };
 }
 
-/* ---------- export JSON brief ---------- */
 function exportJsonBrief() {
   const brief = {
     generated_at: new Date().toISOString(),
-    client_name: state.clientName,
-    warehouse: state.warehouseId,
+    client_name: state.clientName, warehouse: state.warehouseId,
     template_key: state.templateKey,
     template_display: TEMPLATES[state.templateKey].displayName,
-    services: state.services,
-    overrides: state.overrides,
+    services: state.services, overrides: state.overrides,
     presale: state.presale ? { name: state.presale.name, size: state.presale.size } : null,
     parsed_hints: state.parsedHints,
   };
   const blob = new Blob([JSON.stringify(brief, null, 2)], { type: "application/json" });
-  const fn = (state.clientName.trim() || "Client") + " Brief.json";
-  saveAs(blob, fn);
+  saveAs(blob, (state.clientName.trim() || "Client") + " Brief.json");
 }
 
 function showErrors(errs) {
-  const host = $("errors");
-  host.innerHTML = "";
+  const host = $("errors"); host.innerHTML = "";
   if (!errs || errs.length === 0) return;
-  const ul = el("ul");
-  for (const e of errs) ul.appendChild(el("li", {}, e));
+  const ul = el("ul"); for (const e of errs) ul.appendChild(el("li", {}, e));
   host.appendChild(ul);
 }
 
 /* ---------- wire up ---------- */
 function init() {
-  renderWarehouseOptions();
-  renderServicesTable();
-  renderOverrides();
-  updateSummary();
-  updateFilenamePreview();
-  setupDropZone();
-
+  renderWarehouseOptions(); renderServicesTable();
+  renderOverrides(); updateSummary(); updateFilenamePreview(); setupDropZone();
   $("client-name").addEventListener("input", (e) => {
-    state.clientName = e.target.value;
-    updateFilenamePreview(); updateSummary();
+    state.clientName = e.target.value; updateFilenamePreview(); updateSummary();
   });
   $("warehouse").addEventListener("change", (e) => {
     state.warehouseId = e.target.value;
-    updateTemplateTag();
-    renderServicesTable();
-    renderOverrides();
-    updateSummary();
+    updateTemplateTag(); renderServicesTable(); renderOverrides(); updateSummary();
   });
   $("generate-btn").addEventListener("click", generateProposal);
   $("export-json-btn").addEventListener("click", exportJsonBrief);
   $("reset-btn").addEventListener("click", () => {
-    state.clientName = "";
-    state.services = {};
-    state.overrides = {};
-    clearFile();
-    $("client-name").value = "";
-    renderServicesTable();
-    renderOverrides();
-    updateFilenamePreview();
-    updateSummary();
-    showErrors([]);
+    state.clientName = ""; state.services = {}; state.overrides = {};
+    clearFile(); $("client-name").value = "";
+    renderServicesTable(); renderOverrides();
+    updateFilenamePreview(); updateSummary(); showErrors([]);
+  });
+  // step indicator click → scroll to panel
+  document.querySelectorAll(".step-progress .seg").forEach(s => {
+    s.addEventListener("click", () => {
+      const id = "panel-" + s.dataset.step;
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 }
-
 document.addEventListener("DOMContentLoaded", init);
 </script>
 </body>
