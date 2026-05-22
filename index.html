@@ -373,8 +373,19 @@
     color: var(--accent); font-size: 11px;
     padding: 14px 10px; letter-spacing: 0.2em; text-transform: uppercase;
   }
-  table.svc tr.section td::before { content: "[ "; color: var(--ink-4); }
-  table.svc tr.section td::after { content: " ]"; color: var(--ink-4); }
+  table.svc tr.section td.section-label::before { content: "[ "; color: var(--ink-4); }
+  table.svc tr.section td.section-label::after { content: " ]"; color: var(--ink-4); }
+  table.svc tr.section td.group-toggle {
+    text-align: center; width: 28px; padding: 14px 10px;
+    background: linear-gradient(90deg, rgba(91, 139, 255, 0.12), rgba(91, 139, 255, 0.04));
+  }
+  table.svc tr.section td.group-toggle input[type="checkbox"] {
+    accent-color: var(--accent-cyan); width: 15px; height: 15px;
+    cursor: pointer; filter: drop-shadow(0 0 4px rgba(91, 234, 255, 0.4));
+  }
+  table.svc tr.section td.group-toggle input[type="checkbox"]:indeterminate {
+    accent-color: var(--accent-2);
+  }
   table.svc td.label { color: var(--ink); font-weight: 400; }
   table.svc td.rate { color: var(--ink-3); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
   table.svc td.toggle { text-align: center; width: 28px; }
@@ -3862,29 +3873,77 @@ function renderServicesTable() {
       el("th", { style: "width: 130px;" }, "RATE")
     )));
   const tbody = el("tbody");
+
+  // Track groups so we can sync the group checkbox <-> item checkboxes
+  const groups = [];
+  let currentGroup = null;
+
+  function syncGroupCheckbox(g) {
+    if (!g || g.items.length === 0) return;
+    const n = g.items.length;
+    const onCount = g.items.filter(it => it.checkbox.checked).length;
+    if (onCount === 0) {
+      g.groupCheckbox.checked = false;
+      g.groupCheckbox.indeterminate = false;
+    } else if (onCount === n) {
+      g.groupCheckbox.checked = true;
+      g.groupCheckbox.indeterminate = false;
+    } else {
+      g.groupCheckbox.checked = false;
+      g.groupCheckbox.indeterminate = true;
+    }
+  }
+
   for (const inp of tpl.calcInputs) {
     if (inp.type === "section") {
-      tbody.appendChild(el("tr", { class: "section" }, el("td", { colspan: 4 }, inp.label)));
+      const groupCb = el("input", { type: "checkbox", title: "Toggle all line items in this group" });
+      const groupRef = { groupCheckbox: groupCb, items: [], label: inp.label };
+      groups.push(groupRef);
+      currentGroup = groupRef;
+      groupCb.addEventListener("change", () => {
+        const on = groupCb.checked;
+        for (const it of groupRef.items) {
+          it.checkbox.checked = on;
+          if (on) {
+            const existing = state.services[it.label];
+            state.services[it.label] = (existing != null ? existing : 0);
+          } else {
+            delete state.services[it.label];
+          }
+        }
+        groupCb.indeterminate = false;
+        updateSummary();
+      });
+      tbody.appendChild(el("tr", { class: "section" },
+        el("td", { class: "toggle group-toggle" }, groupCb),
+        el("td", { class: "section-label", colspan: 3 }, inp.label)
+      ));
       continue;
     }
     const mapping = mapByLabel[inp.label];
     const checked = state.services[inp.label] != null;
     const qty = state.services[inp.label] || 0;
+    const itemGroup = currentGroup; // capture for closures
     const checkbox = el("input", {
       type: "checkbox", checked: checked,
       onchange: (ev) => {
         if (ev.target.checked) state.services[inp.label] = qty || 0;
         else delete state.services[inp.label];
+        syncGroupCheckbox(itemGroup);
         updateSummary();
       }
     });
+    if (itemGroup) itemGroup.items.push({ checkbox, label: inp.label });
     const rateCell = el("td", { class: "rate" }, computeRate(tpl, mapping, qty, state.overrides));
     const qtyInput = el("input", {
       type: "number", min: "0", step: "1", value: qty || "", placeholder: "0",
       oninput: (ev) => {
         const v = parseFloat(ev.target.value) || 0;
-        if (!(inp.label in state.services)) { state.services[inp.label] = v; checkbox.checked = true; }
-        else { state.services[inp.label] = v; }
+        if (!(inp.label in state.services)) {
+          state.services[inp.label] = v;
+          checkbox.checked = true;
+          syncGroupCheckbox(itemGroup);
+        } else { state.services[inp.label] = v; }
         rateCell.textContent = computeRate(tpl, mapping, v, state.overrides);
         updateSummary();
       }
@@ -3896,6 +3955,10 @@ function renderServicesTable() {
       rateCell
     ));
   }
+
+  // Initialize each group checkbox to reflect current item state
+  for (const g of groups) syncGroupCheckbox(g);
+
   tbl.appendChild(tbody); host.appendChild(tbl);
 }
 function computeRate(tpl, mapping, qty, overrides) {
